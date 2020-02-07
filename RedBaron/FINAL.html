@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset=utf-8>
+		<title>My first three.js app</title>
+		<style>
+			@font-face {
+				font-family: myFont;
+				src: url(organic_teabags.woff);
+			}
+			body {
+				margin: 0;
+				overflow: hidden;
+			}
+			
+			#info {
+				position: absolute;
+				top: 10px;
+				right: 570px;
+				width: 100%;
+				text-align: center;
+				z-index: 100;
+				display:block;
+				font-family: myFont;
+				font-size: 25px;
+				color: #5F021F;
+			}
+			
+			#top {
+				position: absolute;
+				top: 10px;
+				right: 470px;
+				width: 100%;
+				text-align: center;
+				z-index: 100;
+				display:block;
+				font-family: myFont;
+				font-size: 25px;
+				color: #5F021F;
+			}
+			
+			#prosp{
+				position: absolute;
+				top: 10px;
+				width: 100%;
+				text-align: center;
+				z-index: 100;
+				display:block;
+				font-family: myFont;
+				font-size: 20px;
+				color: #5F021F;
+				opacity: 0.6;
+			}
+
+			#difficulty{
+				position: absolute;
+				top: 10px;
+				right: 300px;
+				width: 100%;
+				text-align: center;
+				z-index: 100;
+				display:block;
+				font-family: myFont;
+				font-size: 20px;
+				color: #5F021F;
+				opacity: 0.6;
+			}
+			
+		</style>
+	</head>
+	<body>
+		<canvas id="mondo"></canvas>
+		
+		<div id="info">SCORE 
+			<div id="points">0</div>
+		</div>
+		
+		<div id="top">TOP SCORE
+			<div id="score">0</div>
+		</div>
+
+		<div id="difficulty">DIFFICULTY
+			<div id="level">Easy</div>
+		</div>
+
+		
+		<div id="prosp">Press P to change prospective and O to change difficulty</div>
+		
+		<script src="js/three.js"></script>
+		<script src="js/OrbitControls.js"></script>
+		<script src="js/OBJLoader.js"></script>
+		<script src="js/MTLLoader.js"></script>
+		
+		<script>
+
+			//VARIABLES
+			var scene, camera, renderer, obstacle;
+			var sky, human, engine, cloud, ground, plane;
+			var goods = new Array(), numGoods=0;
+			
+			//ANIMATION
+			var hairs;
+			var hairsTop;
+			var angleHairs=0;
+			var clouds;
+			var angleCloud=0;
+
+			//AUDIO
+			var listener2, audioLoader2, sound2;
+			var listener3, audioLoader3, sound3;
+
+			//CAMERA CONTROL
+			var numcam = 1;
+			document.addEventListener('keydown', changeCamera);
+
+			//DIFFICULTY CONTROL
+			var difficulty = 1;
+			document.addEventListener('keydown', changeDifficulty);
+
+			//PLANE CONTROL
+			var mousePos={x:0, y:0, z:0};
+			document.addEventListener('mousemove', handleMouseMove, false);
+
+			//MATH Stuff
+			var radiusO = 1150, radiusG =1400, radiusC= 1200;
+			var tO=1, tG=1, tC=1;
+			var velO=0.01, velG=0.003, velC=0.003;
+			var up_down = 1;
+
+			//GAME SCORE
+			var points = parseInt(document.getElementById("points").innerHTML);
+			window.setInterval(updateScore, 300);
+			///////////////////////////////////////////////////////////////////////////////////////////////
+			///////////////////////////////////////////////////////////////////////////////////////////////
+
+			function createScene(){
+				var canvas = document.getElementById("mondo");
+				var width = window.innerWidth, height = window.innerHeight;
+
+				renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: true, alpha: true});
+				renderer.setSize(width, height);
+				
+				//SHADOWS
+				renderer.shadowMapEnabled = true;
+				renderer.shadowMapType = THREE.PCFSoftShadowMap;
+
+				camera = new THREE.PerspectiveCamera(60, width/height, 1, 10000);
+				camera.position.set(60, 50, 750); 
+				
+				scene = new THREE.Scene();
+				scene.background = new THREE.Color(0x87CEFA);
+				scene.fog = new THREE.Fog(0x87CEFA, 600 , 1500);
+
+				//SOUNDTRACK;
+				var listener = new THREE.AudioListener();
+				camera.add(listener);
+				var sound = new THREE.Audio(listener);
+				var audioLoader = new THREE.AudioLoader();
+				audioLoader.load('soundtrack.mp3', function(buffer) {
+							sound.setBuffer(buffer);
+							sound.setLoop(true);
+							sound.setVolume(0.3);
+							sound.play();
+				});
+
+				//AUDIO EFFECT
+				listener2 = new THREE.AudioListener();
+				camera.add(listener2);
+				sound2 = new THREE.Audio(listener2);
+				audioLoader2 = new THREE.AudioLoader();
+				audioLoader2.load('crash_sound.mp3', function(buffer) {
+							sound2.setBuffer(buffer);
+							sound2.setVolume(0.3);
+				});
+				
+				listener3 = new THREE.AudioListener();
+				camera.add(listener3);
+				sound3 = new THREE.Audio(listener3);
+				audioLoader3 = new THREE.AudioLoader();
+				audioLoader3.load('point_sound.mp3', function(buffer) {
+							sound3.setBuffer(buffer);
+							sound3.setVolume(0.3);
+				});
+
+			}
+
+			function createLights(){
+				var directionalLight = new THREE.DirectionalLight(0xfe5b35, 0.9);
+				directionalLight.position.set(400, 600, -200);
+				
+				directionalLight.castShadow = true;
+				directionalLight.shadow = new THREE.LightShadow(new THREE.PerspectiveCamera(100, 1, 1, 10000));
+				directionalLight.shadow.bias = 0.0001;
+				directionalLight.shadow.mapSize.width = 2048*2;
+				directionalLight.shadow.mapSize.height= 2048*2;
+				directionalLight.shadowDarkness = 0.5;
+				scene.add(directionalLight);
+
+				var sunset = new THREE.PointLight(0xfe5b35, 1.0);
+				sunset.position.set(0, 150, -800);
+				
+				scene.add(sunset);
+
+				var ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+				scene.add(ambientLight);
+			}	
+			
+			function loadHuman(material, object, place, x, y, z, scale){
+				var mtlLoader = new THREE.MTLLoader();
+				mtlLoader.load(material, function(mymat){
+					mymat.preload();
+
+					var loader = new THREE.OBJLoader();
+					loader.setMaterials(mymat);
+					
+					loader.load(object, function (obj){
+						human=obj;
+						human.scale.set(scale, scale, scale);
+						human.position.set(x,y,z);
+						human.traverse( function ( child ) {
+           					if ( child instanceof THREE.Mesh ) {
+             			 		child.castShadow = true;
+             			 		child.receiveShadow= true;
+            				}
+          				});
+						place.add(human);
+					});
+				});
+			}
+	
+			function loadCloud(material, object, place, x, y, z, scale, rotationZ){
+				var mtlLoader = new THREE.MTLLoader();
+				mtlLoader.load(material, function(mymat){
+					mymat.preload();
+
+					var loader = new THREE.OBJLoader();
+					loader.setMaterials(mymat);
+					
+					loader.load(object, function (obj){
+						cloud=obj;
+						cloud.scale.set(scale, scale, scale);
+						cloud.position.set(x,y,z);
+						cloud.rotation.z = rotationZ;
+						cloud.traverse( function ( child ) {
+           					if ( child instanceof THREE.Mesh ) {
+             			 		child.castShadow = true;
+            				}
+          				});
+						place.add(cloud);
+					});
+				});
+			}
+			
+			function loadGround(material, object, place, x, y, z, scale){
+				var mtlLoader = new THREE.MTLLoader();
+				mtlLoader.load(material, function(mymat){
+					mymat.preload();
+
+					var loader = new THREE.OBJLoader();
+					loader.setMaterials(mymat);
+					
+					loader.load(object, function (obj){
+						ground=obj;
+						ground.scale.set(scale, scale, scale);
+						ground.position.set(x,y,z);
+						ground.traverse( function ( child ) {
+           					if ( child instanceof THREE.Mesh ) {
+             			 		child.castShadow = true;
+             			 		child.receiveShadow= true;
+            				}
+          				});
+						place.add(ground);
+					});
+				});
+			}
+
+			function loadEngine(material, object, place, x, y, z, scale){
+				var mtlLoader = new THREE.MTLLoader();
+				mtlLoader.load(material, function(mymat){
+					mymat.preload();
+
+					var loader = new THREE.OBJLoader();
+					loader.setMaterials(mymat);
+					
+					loader.load(object, function (obj){
+						engine=obj;
+						engine.scale.set(scale, scale, scale);
+						engine.position.set(x,y,z);
+						engine.traverse( function ( child ) {
+           					if ( child instanceof THREE.Mesh ) {
+             			 		child.castShadow = true;
+             			 		child.receiveShadow= true;
+            				}
+          				});
+						place.add(engine);
+					});
+				});
+			}
+			
+			function createSky(){
+				sky = new THREE.Object3D();	
+				var nClouds = 20;
+				var step = Math.PI*2/nClouds;
+				for (var i=0; i<nClouds; i++){
+					//trigonometria
+					var angle = step*i;
+					var dist = 750 + Math.random()*200;
+					var x = Math.cos(angle)*dist;
+					var y = Math.sin(angle)*dist;
+					var z = 50-Math.random()*500;
+					var scale = Math.floor(Math.random() * (70-30+1))+30;
+					var rotationZ = angle + Math.PI/2;
+					
+					loadCloud("http://localhost:8000/object/Obj/cloudv3.mtl", "http://localhost:8000/object/Obj/cloudv3.obj", sky, x, y, z, scale, rotationZ);
+				}
+				
+				sky.position.y = -500;
+				scene.add(sky);
+			}
+			
+			
+			function createPlane(){
+				plane = new THREE.Object3D(); //GRUPPO HUMAN+ENGINE
+			
+				loadHuman("http://localhost:8000/object/Obj/RedBaron.mtl", "http://localhost:8000/object/Obj/RedBaron.obj", plane, 0, 10, 0, 15);
+				loadEngine("http://localhost:8000/object/Obj/elicav3.mtl", "http://localhost:8000/object/Obj/elicav3.obj", plane, 46, 22, 0, 15);
+				
+				scene.add(plane);
+			}
+
+			function createObstacle(){
+				var material = "http://localhost:8000/object/Obj/mine.mtl";
+				var object   = "http://localhost:8000/object/Obj/mine.obj";
+
+				var mtlLoader = new THREE.MTLLoader();
+				mtlLoader.load(material, function(mymat){
+					mymat.preload();
+
+					var loader = new THREE.OBJLoader();
+					loader.setMaterials(mymat);
+					
+					loader.load(object, function (obj){
+						obstacle=obj;
+						obstacle.scale.set(30, 30, 30);
+						obstacle.traverse( function ( child ) {
+           					if ( child instanceof THREE.Mesh ) {
+             			 		child.castShadow = true;
+            				}
+          				});
+						scene.add(obstacle);
+					});
+				});
+			}
+
+			function createGround(){
+				loadGround("http://localhost:8000/object/Obj/worldv2.mtl", "http://localhost:8000/object/Obj/worldv2.obj", scene, 0, -1250, -160, 1000, 0);
+			}
+			
+
+			function handleMouseMove(event) {
+				var X = -1 + (event.clientX / window.innerWidth )*2;
+				var Y = 1 - (event.clientY / window.innerHeight )*2;
+				mousePos = {x:X, y:Y};
+			}
+			
+			function updatePlane(){
+				var normalX = normalize(mousePos.x, -1, 1, -300, 300);
+				var normalY = normalize(mousePos.y, -1, 1, -115, 250);
+				
+				plane.position.y += (normalY-plane.position.y)*0.2;
+				plane.position.x += (normalX-plane.position.x)*0.2;
+				plane.rotation.z =  (normalY-plane.position.y)*0.0175;
+				plane.rotation.x =  (plane.position.y-normalY)*0.0150;
+			}
+			
+
+			function normalize(v, vmin, vmax, tmin, tmax){
+				var nv = Math.max(Math.min(v,vmax), vmin);
+				var dv = vmax-vmin;
+				var pc = (nv-vmin)/dv;
+				var dt = tmax-tmin;
+				var tv = tmin + (pc*dt);
+				return tv;
+			}
+
+			function getRandomInt(min, max){
+				return Math.floor(Math.random() * (max - min + 1)) + min;
+			}
+
+			
+			function resetGoods(){
+				radiusG = getRandomInt(1175,1500);
+				tG=1;
+				up_down = getRandomInt(1, 2);
+				createGoods();
+			}
+			
+
+			function animateObstacle(){
+				if (obstacle){
+					tO++;
+					obstacle.position.x = radiusO*Math.cos(velO*tO);
+					obstacle.position.y = -1250+radiusO*Math.sin(velO*tO)
+					obstacle.rotation.y += 0.05;
+					if (obstacle.position.x<-1100) resetObstacle();
+					
+					var distance = plane.position.distanceTo(obstacle.position);
+					if(distance<60) handleCollision();
+				}
+			}
+
+
+			function handleCollision(){
+				if(obstacle){
+					resetObstacle();
+					sound2.play();
+					clearScore();
+				}
+			}
+
+
+			function resetObstacle(){
+				radiusO = getRandomInt(1175,1500);
+				tO=1;
+				if (difficulty == 1){
+						velO = 0.01;
+					}
+					else if( difficulty == 2 ){
+						velO=0.02
+					}
+					else if(difficulty == 3){
+						velO=0.03;
+					}
+			}
+
+
+			function createGoods(){
+				goods=new Array();
+				numGoods = getRandomInt(1, 2); //numero di oggetti
+				console.log(numGoods);
+				for (var i=0; i<numGoods; i++){
+					var r = getRandomInt(15, 20); //raggio
+					var geometry = new THREE.SphereGeometry(r, 4, 4);
+					var material = new THREE.MeshPhongMaterial( {color: 0x003399} );
+					goods.push(new THREE.Mesh(geometry, material));
+					goods[i].position.y = -3000; //per nasconderlo inizialmente
+					goods[i].castShadow = true;
+					scene.add(goods[i]);
+				}	
+			}
+
+
+			function animateGoods(){
+				tG++;
+				for (var i=0; i<numGoods; i++){
+					goods[i].position.x = radiusG*Math.cos(velG*tG);
+					goods[i].position.y = -1250+radiusG*Math.sin(velG*tG);
+					goods[i].rotation.y += 0.03;
+					if (i>0){
+						goods[i].position.x += 50;	
+						if (up_down==1)
+							goods[i].position.y += 50;	
+						else if (up_down==2)
+							goods[i].position.y -= 50;
+					}
+					
+					var distance = plane.position.distanceTo(goods[i].position);
+					if(distance<60){
+						handleGoods(i);
+					}
+				}
+				if (goods[0].position.x<-1100) resetGoods();
+			}
+
+
+			function handleGoods(i){
+				scene.remove(goods[i]);
+				sound3.play();
+				points+=10;
+				document.getElementById("points").innerHTML = points;
+			}
+
+			
+			function updateScore(){
+				
+				if (difficulty == 1){
+						points+=1;
+					}
+					else if( difficulty == 2 ){
+						points+=2;
+					}
+					else if(difficulty == 3){
+						points+=5;
+					}
+				document.getElementById("points").innerHTML = points;
+			}
+
+
+			function clearScore(){
+				var currentScore = parseInt(document.getElementById("score").innerHTML);
+				var currentPoint = parseInt(document.getElementById("points").innerHTML);
+
+				if(currentPoint>currentScore) document.getElementById("score").innerHTML = points;
+				points=0;
+				document.getElementById("points").innerHTML = points;
+			}
+
+
+			function changeCamera(event){
+				if (event.keyCode==80){
+					if (numcam == 1){
+						numcam = 2;
+						camera.position.set(-700, 200, 300);
+						controls.update();
+					}
+					else if (numcam == 2){
+						numcam = 1;
+						camera.position.set(60, 50, 750); 
+						controls.update();
+					}
+				}
+			}
+
+
+			//CAMBIO DIFFICOLTA`
+			function changeDifficulty(event){
+				if(event.keyCode==79){
+					if (difficulty == 1){
+						velO = 0.01;
+						difficulty=2;
+					}
+					else if( difficulty == 2 ){
+						velO=0.02
+						difficulty=3;
+					}
+					else if(difficulty == 3){
+						velO=0.03;
+						difficulty=1;
+					}
+				}
+				updateDifficulty();
+			}
+
+			function updateDifficulty(){
+				if (difficulty == 1){
+						document.getElementById("level").innerHTML = "Easy" ;
+					}
+					else if( difficulty == 2 ){
+						document.getElementById("level").innerHTML = "Medium";
+					}
+					else if(difficulty == 3){
+						document.getElementById("level").innerHTML = "Hard";
+					}
+			}
+
+
+			//ANIMAZIONE FUMO AEREO
+			function createSmoke(){
+				clouds = new Array();
+
+				for(var i=0; i<8; i++){
+					var x =  getRandomInt(8, 20);
+					var y =  getRandomInt(8, 20);
+					var z =  getRandomInt(8, 20);
+
+					var cloudGeo   = new THREE.BoxGeometry(x,y,z);
+					var cloudMat   = new THREE.MeshPhongMaterial({color:0xF5F5F5});
+					clouds.push(new THREE.Mesh(cloudGeo, cloudMat));
+					clouds[i].geometry.applyMatrix(new THREE.Matrix4().makeTranslation(0,5,0));
+					clouds[i].castShadow = true;
+					clouds[i].position.set(i*20, 1000, 0);
+					scene.add(clouds[i]);
+				}
+			}
+
+
+			function animateSmoke(){
+				for(var i=0; i<8; i++ ){
+					var singleCloud = clouds[i];
+					var distance = plane.position.distanceTo(singleCloud.position);
+					if(distance>350) resetSmokePosition(i);
+					singleCloud.position.x-=5;
+					singleCloud.rotation.x+=0.02;
+					//singleCloud.rotation.y+=0.02;
+					singleCloud.rotation.z+=0.01;
+				}
+			}
+
+			function resetSmokePosition(i){
+				var singleCloud = clouds[i];
+				var x = plane.position.x;
+				var y = plane.position.y;
+				var z = plane.position.z;
+				if (x == y == z == 0) return;
+				singleCloud.position.set(x-120 + i*15, y+15, z);
+			}
+
+
+			//ANIMAZIONE CAPELLI
+			function createHair(){
+
+				hairs = new THREE.Object3D();
+				var hairGeo = new THREE.BoxGeometry(7,7,7);
+				var hairMat = new THREE.MeshLambertMaterial({color:0x582F04});
+				var hair = new THREE.Mesh(hairGeo, hairMat);
+				hair.geometry.applyMatrix(new THREE.Matrix4().makeTranslation(0,2,0));
+				hairsTop = new THREE.Object3D();
+				for (var i=0; i<12; i++){
+					var h = hair.clone();
+					var col = i%3;
+					var row = Math.floor(i/3);
+					var startPosZ = -4;
+					var startPosX = -4;
+					h.position.set(startPosX + row*4, 0, startPosZ + col*4);
+					hairsTop.add(h);
+				}
+				hairs.add(hairsTop);
+
+				//SIDE HAIR
+				var sideHairGeo = new THREE.BoxGeometry(12,4,2);
+				sideHairGeo.applyMatrix(new THREE.Matrix4().makeTranslation(-6,0,0));
+				var RsideHair = new THREE.Mesh(sideHairGeo, hairMat);
+				var LsideHair = RsideHair.clone();
+				RsideHair.position.set(8,-2,8);
+				LsideHair.position.set(8,-2,8);
+				hairs.add(RsideHair);
+				hairs.add(LsideHair);
+
+				//BACK HAIR
+				var backHairGeo = new THREE.BoxGeometry(2,8,10);
+				var backHair = new THREE.Mesh(backHairGeo, hairMat);
+				backHair.position.set(-1,-4,0)
+
+
+				hairs.add(backHair);
+				hairs.position.set(-13.5,51,0);
+				scene.add(hairs);
+				plane.add(hairs);
+			}
+			
+			function animateHair(){
+				var fluentHair = hairsTop.children;
+				var l = fluentHair.length;
+				for (var i=0; i<l; i++){
+					var h = fluentHair[i];
+					h.scale.y = .75 + Math.cos(angleHairs+i/3)*.25;
+				}
+				angleHairs += 0.16;
+			}
+
+
+
+			///////////////////////////////////////////////////////////////////////////////////////////////////
+			///////////////////////////////////////////////////////////////////////////////////////////////////
+			///////////////////////////////////////////////////////////////////////////////////////////////////
+
+			var controls;
+			function start(){
+				createScene();
+				createLights();
+				createSky();
+				createGround();
+				createPlane();
+				createObstacle();
+				createGoods();
+				createHair();
+				createSmoke();
+				
+				controls = new THREE.OrbitControls(camera, renderer.domElement);
+				controls.enabled = false;
+			
+				render();
+			}
+			
+			function render(){
+				sky.rotation.z += 0.002;
+				if (ground) ground.rotation.z += 0.009;
+				if (engine)	engine.rotation.x += 0.42;
+				
+				updatePlane();
+				animateObstacle();
+				animateGoods();
+				animateHair();
+				animateSmoke();
+				
+ 				requestAnimationFrame(render);
+				renderer.render(scene, camera);
+			}
+			
+			start();
+		</script>
+	</body>
+</html>
